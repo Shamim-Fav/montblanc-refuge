@@ -1,12 +1,14 @@
 import streamlit as st
-from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
-import pandas as pd
-import time
 import re
+from datetime import datetime, timedelta
+import pandas as pd
+from io import StringIO
 
-# ======== Constants ========
+# -------------------------
+# Configuration
+# -------------------------
 REFUGE_IDS = "32383,32365,123462,127958,32357,32358,32356,32369,32372,39948,32361,39796,39797,32362,116702,32379,32378,36470,67403,32789,32368,116701,32367,32366,32405,39703,32406,32404,32398,32395,114712,32394,46179,32399,32397,32396,32403,32400,32401,32393,32391,32385,32390,32388,32389,32386,36471,32377,133634"
 
 refuge_list = [
@@ -58,13 +60,15 @@ name_to_id = {name: str(rid) for rid, name in refuge_list}
 
 POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    "User-Agent": "Mozilla/5.0",
     "Content-Type": "application/x-www-form-urlencoded",
     "Origin": "https://www.montourdumontblanc.com",
     "Referer": "https://www.montourdumontblanc.com/",
 }
 
-# ======== Functions ========
+# -------------------------
+# Helper functions
+# -------------------------
 def parse_refuge_block(div):
     refuge_id = None
     map_btn = div.select_one('a.bouton.carte')
@@ -110,6 +114,19 @@ def parse_refuge_block(div):
         "available_date": available_date
     }
 
+def generate_date_range(center_date_str):
+    try:
+        center_date = datetime.strptime(center_date_str, "%d/%m/%Y")
+    except ValueError:
+        st.error("Invalid start date format. Use dd/mm/yyyy.")
+        return []
+
+    date_list = []
+    for offset in range(-5, 6):
+        dt = center_date + timedelta(days=offset)
+        date_list.append(dt.strftime("%d/%m/%Y"))
+    return date_list
+
 def run_scraper(selected_ids, selected_dates):
     session = requests.Session()
     all_results = []
@@ -119,13 +136,11 @@ def run_scraper(selected_ids, selected_dates):
             current_date = datetime.strptime(date_input, "%d/%m/%Y")
         except ValueError:
             st.error(f"Invalid date format: {date_input}")
-            return
+            continue
 
         day = current_date.strftime("%d")
         month = current_date.strftime("%m")
         year = current_date.strftime("%Y")
-
-        st.text(f"Checking availability for {date_input}...")
 
         post_data = {
             "NumEtape": "2",
@@ -157,60 +172,50 @@ def run_scraper(selected_ids, selected_dates):
                 break
             except Exception as e:
                 st.warning(f"Error on {date_input} attempt {attempt+1}: {e}")
-                time.sleep(2)
 
         if not success:
             st.error(f"Failed to get data for {date_input} after 3 attempts.")
-
-        time.sleep(1)
 
     filtered_results = [r for r in all_results if r["id"] in selected_ids]
 
     if filtered_results:
         df = pd.DataFrame(filtered_results)
         st.success("Filtered results ready!")
-
-        # ✅ Correct way to make download button
-        csv_data = df.to_csv(index=False).encode('utf-8')
+        csv_buffer = StringIO()
+        df.to_csv(csv_buffer, index=False)
         st.download_button(
             label="Download CSV",
-            data=csv_data,
+            data=csv_buffer.getvalue(),
             file_name="filtered_availability_results.csv",
             mime="text/csv"
         )
-
+        st.dataframe(df)
     else:
         st.info("No results found for the selected refuges and dates.")
 
-def generate_date_range(center_date_str):
-    try:
-        center_date = datetime.strptime(center_date_str, "%d/%m/%Y")
-    except ValueError:
-        st.error("Invalid start date format. Use dd/mm/yyyy.")
-        return []
-
-    date_list = []
-    for offset in range(-5, 6):  # ±5 days
-        dt = center_date + timedelta(days=offset)
-        date_list.append(dt.strftime("%d/%m/%Y"))
-    return date_list
-
-# ======== Streamlit UI ========
+# -------------------------
+# Streamlit UI
+# -------------------------
 st.title("Mont Blanc Refuge Availability Scraper")
 
+# Refuge selection
 selected_refuges = st.multiselect(
     "Select Refuge(s):",
-    [name for _, name in refuge_list]
+    options=[name for _, name in refuge_list]
 )
 
-start_date = st.text_input("Enter Main Start Date (dd/mm/yyyy):")
+# Date input and generation
+start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
+selected_dates = []
+if start_date_str:
+    date_options = generate_date_range(start_date_str)
+    selected_dates = st.multiselect(
+        "Select Dates to Check:",
+        options=date_options,
+        default=date_options
+    )
 
-if st.button("Generate Dates ±5 Days"):
-    dates = generate_date_range(start_date)
-    selected_dates = st.multiselect("Select Dates to Check:", dates, default=dates)
-else:
-    selected_dates = []
-
+# Run scraper button
 if st.button("Run Scraper"):
     if not selected_refuges:
         st.warning("Please select at least one refuge.")
