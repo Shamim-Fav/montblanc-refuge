@@ -9,52 +9,31 @@ from io import BytesIO
 # -------------------------
 # Configuration
 # -------------------------
-refuge_list = [
-    (156, "Auberge la Grande Ourse"),
-    (162, "Gîte le Pontet"),
-    (164, "Chalet Les Méandres (ex Tupilak)"),
-    (191, "Hotel du Col de Fenêtre"),
-    (22, "Gîte Mermoud"),
-    (23, "Refuge de Nant Borrant"),
-    (25, "Relais d'Arpette"),
-    (26, "Rifugio G. Bertone"),
-    (28, "Refuge du Fioux"),
-    (283, "Maya-Joie"),
-    (31, "Rifugio Monte Bianco - Cai Uget"),
-    (322, "Gîte La Léchère"),
-    (329, "Refuge Le Peuty"),
-    (36, "Hôtel Lavachey"),
-    (37, "Hôtel Funivia"),
-    (39, "Rifugio Maison Vieille"),
-    (406, "Gîte de la Fouly"),
-    (41, "Gite le Randonneur du Mont Blanc"),
-    (413, "Les Chambres du Soleil"),
-    (416, "Refuge des Prés"),
-    (428, "Gîte Les Mélèzes"),
-    (445, "La Ferme à Piron"),
-    (47, "Refuge des Mottets"),
-    (476, "Rifugio Chapy Mont-Blanc"),
-    (49, "Refuge de la Balme"),
-    (50, "Auberge du Truc"),
-    (52, "Auberge Mont-Blanc"),
-    (54, "Auberge la Boërne"),
-    (56, "Auberge Gîte Bon Abri"),
-    (57, "Chalet 'Le Dolent'"),
-    (58, "Gîte Alpage de La Peule"),
-    (60, "Hôtel du Col de la Forclaz"),
-    (62, "Hôtel Edelweiss"),
-    (64, "Chalet Alpin du Tour"),
-    (67, "Gîte Le Moulin"),
-    (69, "Gîte Michel Fagot"),
-    (71, "Hôtel Chalet Val Ferret"),
-    (72, "Pension en Plein Air"),
-    (76, "Auberge-Refuge de la Nova"),
-    (93, "Gîte d'Alpage Les Ecuries de Charamillon"),
-    (96, "Auberge des Glaciers"),
+REFUGE_IDS = "32383,32365,123462,127958,32357,32358,32356,32369,32372,39948,32361,39796,39797,32362,116702,32379,32378,36470,67403,32789,32368,116701,32367,32366,32405,39703,32406,32404,32398,32395,114712,32394,46179,32399,32397,32396,32403,32400,32401,32393,32391,32385,32390,32388,32389,32386,36471,32377,133634"
+
+# Regions with refuge names
+region_french = [
+    "Gîte le Pontet", "Chalet Les Méandres (ex Tupilak)", "Gîte Mermoud", 
+    "Refuge de Nant Borrant", "Refuge du Fioux", "Les Chambres du Soleil",
+    "Refuge des Prés", "Gîte Les Mélèzes", "La Ferme à Piron", "Refuge des Mottets",
+    "Refuge de la Balme", "Auberge du Truc", "Auberge la Boërne", "Chalet Alpin du Tour",
+    "Gîte Le Moulin", "Gîte Michel Fagot", "Auberge-Refuge de la Nova",
+    "Gîte d'Alpage Les Ecuries de Charamillon"
 ]
 
-# Map names only
-name_to_id = {name: str(rid) for rid, name in refuge_list}
+region_italian = [
+    "Rifugio G. Bertone", "Rifugio Monte Bianco - Cai Uget", "Hôtel Lavachey", 
+    "Hôtel Funivia", "Rifugio Maison Vieille", "Gite le Randonneur du Mont Blanc",
+    "Rifugio Chapy Mont-Blanc", "Hôtel Chalet Val Ferret"
+]
+
+region_swiss = [
+    "Auberge la Grande Ourse", "Hotel du Col de Fenêtre", "Relais d'Arpette",
+    "Maya-Joie", "Gîte La Léchère", "Refuge Le Peuty", "Gîte de la Fouly",
+    "Auberge Mont-Blanc", "Auberge Gîte Bon Abri", "Chalet 'Le Dolent'",
+    "Gîte Alpage de La Peule", "Hôtel du Col de la Forclaz", "Hôtel Edelweiss",
+    "Pension en Plein Air", "Auberge des Glaciers", "Chalet La Grange"
+]
 
 POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
 HEADERS = {
@@ -126,7 +105,7 @@ def run_scraper(selected_names, selected_dates):
             "Globales/JourDebut": day,
             "Globales/MoisDebut": month,
             "Globales/AnDebut": year,
-            "Globales/ListeIdFournisseur": ",".join(name_to_id.values()),
+            "Globales/ListeIdFournisseur": REFUGE_IDS,  # keep all IDs
             "Param/ListeIdService": "1,2",
             "Param/NbPers": "1",
             "Param/DateRech": date_input
@@ -171,22 +150,31 @@ def run_scraper(selected_names, selected_dates):
 # -------------------------
 # Streamlit UI
 # -------------------------
-st.title("Mont Blanc Refuge Availability Scraper")
+# Logo + Title
+st.image("BTA_LOGO_square.webp", width=150)
+st.title("Mont Blanc Refuge Availability")
 
-# Refuge selection by name only
-selected_refuges = st.multiselect(
-    "Select Refuge(s):",
-    options=[name for _, name in refuge_list]
-)
+# Side-by-side multiselects for three regions
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    selected_french = st.multiselect("French Refuges", options=sorted(region_french))
+with col2:
+    selected_italian = st.multiselect("Italian Refuges", options=sorted(region_italian))
+with col3:
+    selected_swiss = st.multiselect("Swiss Refuges", options=sorted(region_swiss))
+
+selected_refuges = selected_french + selected_italian + selected_swiss
 
 # Date input
 start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
 selected_dates = []
 if start_date_str:
+    date_options = generate_date_range(start_date_str)
     selected_dates = st.multiselect(
         "Select Dates to Check:",
-        options=generate_date_range(start_date_str),
-        default=generate_date_range(start_date_str)
+        options=date_options,
+        default=date_options
     )
 
 # Run scraper
