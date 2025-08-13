@@ -206,9 +206,9 @@ with col3:
     st.image("logo_swiss.png", width=80)
 
 # Prepare regions
-region_french = [name for _, name, region in refuge_list if region=="French"]
-region_italian = [name for _, name, region in refuge_list if region=="Italian"]
-region_swiss = [name for _, name, region in refuge_list if region=="Swiss"]
+selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
+selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
+selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
 
 # Refuge selection
 selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
@@ -233,3 +233,4 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
+
