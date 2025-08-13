@@ -9,24 +9,16 @@ from io import BytesIO
 # -------------------------
 # Configuration
 # -------------------------
+POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
+HEADERS = {
+    "User-Agent": "Mozilla/5.0",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Origin": "https://www.montourdumontblanc.com",
+    "Referer": "https://www.montourdumontblanc.com/",
+}
+
+# Refuge list with regions
 refuge_list = [
-    # Swiss
-    (156, "Auberge la Grande Ourse", "Swiss"),
-    (191, "Hotel du Col de Fenêtre", "Swiss"),
-    (25, "Relais d'Arpette", "Swiss"),
-    (283, "Maya-Joie", "Swiss"),
-    (322, "Gîte La Léchère", "Swiss"),
-    (329, "Refuge Le Peuty", "Swiss"),
-    (406, "Gîte de la Fouly", "Swiss"),
-    (52, "Auberge Mont-Blanc", "Swiss"),
-    (56, "Auberge Gîte Bon Abri", "Swiss"),
-    (57, "Chalet 'Le Dolent'", "Swiss"),
-    (58, "Gîte Alpage de La Peule", "Swiss"),
-    (60, "Hôtel du Col de la Forclaz", "Swiss"),
-    (62, "Hôtel Edelweiss", "Swiss"),
-    (72, "Pension en Plein Air", "Swiss"),
-    (96, "Auberge des Glaciers", "Swiss"),
-    # French
     (162, "Gîte le Pontet", "French"),
     (164, "Chalet Les Méandres (ex Tupilak)", "French"),
     (22, "Gîte Mermoud", "French"),
@@ -45,7 +37,7 @@ refuge_list = [
     (69, "Gîte Michel Fagot", "French"),
     (76, "Auberge-Refuge de la Nova", "French"),
     (93, "Gîte d'Alpage Les Ecuries de Charamillon", "French"),
-    # Italian
+
     (26, "Rifugio G. Bertone", "Italian"),
     (31, "Rifugio Monte Bianco - Cai Uget", "Italian"),
     (36, "Hôtel Lavachey", "Italian"),
@@ -54,15 +46,32 @@ refuge_list = [
     (41, "Gite le Randonneur du Mont Blanc", "Italian"),
     (476, "Rifugio Chapy Mont-Blanc", "Italian"),
     (71, "Hôtel Chalet Val Ferret", "Italian"),
+
+    (156, "Auberge la Grande Ourse", "Swiss"),
+    (191, "Hotel du Col de Fenêtre", "Swiss"),
+    (25, "Relais d'Arpette", "Swiss"),
+    (283, "Maya-Joie", "Swiss"),
+    (322, "Gîte La Léchère", "Swiss"),
+    (329, "Refuge Le Peuty", "Swiss"),
+    (406, "Gîte de la Fouly", "Swiss"),
+    (52, "Auberge Mont-Blanc", "Swiss"),
+    (56, "Auberge Gîte Bon Abri", "Swiss"),
+    (57, "Chalet 'Le Dolent'", "Swiss"),
+    (58, "Gîte Alpage de La Peule", "Swiss"),
+    (60, "Hôtel du Col de la Forclaz", "Swiss"),
+    (62, "Hôtel Edelweiss", "Swiss"),
+    (72, "Pension en Plein Air", "Swiss"),
+    (96, "Auberge des Glaciers", "Swiss"),
 ]
 
-POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
-HEADERS = {
-    "User-Agent": "Mozilla/5.0",
-    "Content-Type": "application/x-www-form-urlencoded",
-    "Origin": "https://www.montourdumontblanc.com",
-    "Referer": "https://www.montourdumontblanc.com/",
-}
+# Map names to ids
+name_to_id = {name: str(rid) for rid, name, _ in refuge_list}
+
+# Region logos
+logo_main = "BTA_LOGO_square.webp"
+logo_french = "logo_french.png"
+logo_italian = "logo_italian.png"
+logo_swiss = "logo_swiss.png"
 
 # -------------------------
 # Helper functions
@@ -103,6 +112,7 @@ def parse_refuge_block(div):
             available_beds = beds_match.group(1)
 
     return {
+        "id": refuge_id,
         "name": name,
         "altitude": altitude,
         "location": location,
@@ -128,6 +138,8 @@ def run_scraper(selected_names, selected_dates):
     session = requests.Session()
     all_results = []
 
+    selected_ids = [name_to_id[name] for name in selected_names]
+
     for date_input in selected_dates:
         try:
             current_date = datetime.strptime(date_input, "%d/%m/%Y")
@@ -139,44 +151,49 @@ def run_scraper(selected_names, selected_dates):
         month = current_date.strftime("%m")
         year = current_date.strftime("%Y")
 
-        # We still post all REFUGE_IDS for server, but filter later by name
-        REFUGE_IDS_ALL = ",".join([str(rid) for rid, _, _ in refuge_list])
-
         post_data = {
             "NumEtape": "2",
             "OSRecherche_caldatedeb4189": date_input,
             "Globales/JourDebut": day,
             "Globales/MoisDebut": month,
             "Globales/AnDebut": year,
-            "Globales/ListeIdFournisseur": REFUGE_IDS_ALL,
+            "Globales/ListeIdFournisseur": ",".join(selected_ids),
             "Param/ListeIdService": "1,2",
             "Param/NbPers": "1",
             "Param/DateRech": date_input
         }
 
-        try:
-            response = session.post(POST_URL, data=post_data, headers=HEADERS, timeout=10)
-            response.raise_for_status()
-            soup = BeautifulSoup(response.text, "html.parser")
+        success = False
+        for attempt in range(3):
+            try:
+                response = session.post(POST_URL, data=post_data, headers=HEADERS, timeout=10)
+                response.raise_for_status()
+                soup = BeautifulSoup(response.text, "html.parser")
 
-            for colphoto_div in soup.select('div.colphoto'):
-                parent_div = colphoto_div.parent.parent
-                if parent_div:
-                    refuge_info = parse_refuge_block(parent_div)
-                    refuge_info['query_date'] = date_input
-                    all_results.append(refuge_info)
-        except Exception as e:
-            st.warning(f"Error on {date_input}: {e}")
+                for colphoto_div in soup.select('div.colphoto'):
+                    parent_div = colphoto_div.parent.parent
+                    if parent_div:
+                        refuge_info = parse_refuge_block(parent_div)
+                        if refuge_info["id"]:
+                            refuge_info['query_date'] = date_input
+                            all_results.append(refuge_info)
+                success = True
+                break
+            except Exception as e:
+                st.warning(f"Error on {date_input} attempt {attempt+1}: {e}")
 
-    # Filter by selected names
+        if not success:
+            st.error(f"Failed to get data for {date_input} after 3 attempts.")
+
+    # Filter only by names
     filtered_results = [r for r in all_results if r["name"] in selected_names]
 
     if filtered_results:
         df = pd.DataFrame(filtered_results)
         df.insert(0, "S.No", range(1, len(df) + 1))
-
         st.success("Filtered results ready!")
 
+        # Download as Excel
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name="Availability")
@@ -186,6 +203,7 @@ def run_scraper(selected_names, selected_dates):
             file_name="Mont Blanc Refuge Availability.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
         st.dataframe(df)
     else:
         st.info("No results found for the selected refuges and dates.")
@@ -193,39 +211,32 @@ def run_scraper(selected_names, selected_dates):
 # -------------------------
 # Streamlit UI
 # -------------------------
-st.image("BTA_LOGO_square.webp", width=120)
+st.image(logo_main, width=120)
 st.title("Mont Blanc Refuge Availability")
 
-# Region logos
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.image("logo_french.png", width=80)
+    st.image(logo_french, width=80)
+    region_french = [str(name) for _, name, region in refuge_list if region=="French" and name]
+    selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
 with col2:
-    st.image("logo_italian.png", width=80)
+    st.image(logo_italian, width=80)
+    region_italian = [str(name) for _, name, region in refuge_list if region=="Italian" and name]
+    selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
 with col3:
-    st.image("logo_swiss.png", width=80)
+    st.image(logo_swiss, width=80)
+    region_swiss = [str(name) for _, name, region in refuge_list if region=="Swiss" and name]
+    selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
 
-# Prepare regions
-selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
-selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
-selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
-
-# Refuge selection
-selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
-selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
-selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
-
-# Combine selected names
-selected_refuges = selected_french + selected_italian + selected_swiss
-
-# Date input
 start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
 selected_dates = []
 if start_date_str:
     date_options = generate_date_range(start_date_str)
     selected_dates = st.multiselect("Select Dates to Check", options=date_options, default=date_options)
 
-# Run scraper
+# Combine selections
+selected_refuges = selected_french + selected_italian + selected_swiss
+
 if st.button("Run Scraper"):
     if not selected_refuges:
         st.warning("Please select at least one refuge.")
@@ -233,4 +244,3 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
-
