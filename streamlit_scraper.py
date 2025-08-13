@@ -129,8 +129,12 @@ def run_scraper(selected_names, selected_dates):
 
     if all_results:
         df = pd.DataFrame(all_results)
+
+        # Add serial starting from 1
+        df.insert(0, "S.No", range(1, len(df) + 1))
+
         st.success(f"Found {len(df)} results!")
-        st.dataframe(df[['name','altitude','location','capacity_total','available_beds','available_date']])
+        st.dataframe(df[['S.No','name','altitude','location','capacity_total','available_beds','available_date']])
 
         # Excel download
         output = BytesIO()
@@ -150,22 +154,23 @@ def run_scraper(selected_names, selected_dates):
 # Streamlit UI
 # -------------------------
 # Logo + Title
-st.image("BTA_LOGO_square.webp", width=150)
-st.title("Mont Blanc Refuge Availability")
+col_logo, col_title, _ = st.columns([1,5,1])
+with col_logo:
+    st.image("logo_french.png", width=80)
+with col_title:
+    st.title("Mont Blanc Refuge Availability")
 
 # Side-by-side multiselects for three regions with logos
 col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.image("logo_french.png", width=80)  # French region logo
+    st.image("logo_french.png", width=80)
     selected_french = st.multiselect("French Refuges", options=sorted(region_french))
-
 with col2:
-    st.image("logo_italian.png", width=80)  # Italian region logo
+    st.image("logo_italian.png", width=80)
     selected_italian = st.multiselect("Italian Refuges", options=sorted(region_italian))
-
 with col3:
-    st.image("logo_swiss.png", width=80)  # Swiss region logo
+    st.image("logo_swiss.png", width=80)
     selected_swiss = st.multiselect("Swiss Refuges", options=sorted(region_swiss))
 
 selected_refuges = selected_french + selected_italian + selected_swiss
