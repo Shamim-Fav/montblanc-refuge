@@ -7,36 +7,54 @@ import pandas as pd
 from io import BytesIO
 
 # -------------------------
-# CONFIGURATION
+# Configuration
 # -------------------------
-
-# Logo and title
-LOGO_PATH = "/mnt/data/BTA_LOGO_square.webp"
-TITLE = "Mont Blanc Refuge Availability"
-
-# Refuge data by region (name only, no IDs)
-REGION1 = [
-    "Gîte le Pontet","Chalet Les Méandres (ex Tupilak)","Gîte Mermoud",
-    "Refuge de Nant Borrant","Refuge du Fioux","Les Chambres du Soleil",
-    "Refuge des Prés","Gîte Les Mélèzes","La Ferme à Piron","Refuge des Mottets",
-    "Refuge de la Balme","Auberge du Truc","Auberge la Boërne","Chalet Alpin du Tour",
-    "Gîte Le Moulin","Gîte Michel Fagot","Auberge-Refuge de la Nova",
-    "Gîte d'Alpage Les Ecuries de Charamillon"
+refuge_list = [
+    (156, "Auberge la Grande Ourse"),
+    (162, "Gîte le Pontet"),
+    (164, "Chalet Les Méandres (ex Tupilak)"),
+    (191, "Hotel du Col de Fenêtre"),
+    (22, "Gîte Mermoud"),
+    (23, "Refuge de Nant Borrant"),
+    (25, "Relais d'Arpette"),
+    (26, "Rifugio G. Bertone"),
+    (28, "Refuge du Fioux"),
+    (283, "Maya-Joie"),
+    (31, "Rifugio Monte Bianco - Cai Uget"),
+    (322, "Gîte La Léchère"),
+    (329, "Refuge Le Peuty"),
+    (36, "Hôtel Lavachey"),
+    (37, "Hôtel Funivia"),
+    (39, "Rifugio Maison Vieille"),
+    (406, "Gîte de la Fouly"),
+    (41, "Gite le Randonneur du Mont Blanc"),
+    (413, "Les Chambres du Soleil"),
+    (416, "Refuge des Prés"),
+    (428, "Gîte Les Mélèzes"),
+    (445, "La Ferme à Piron"),
+    (47, "Refuge des Mottets"),
+    (476, "Rifugio Chapy Mont-Blanc"),
+    (49, "Refuge de la Balme"),
+    (50, "Auberge du Truc"),
+    (52, "Auberge Mont-Blanc"),
+    (54, "Auberge la Boërne"),
+    (56, "Auberge Gîte Bon Abri"),
+    (57, "Chalet 'Le Dolent'"),
+    (58, "Gîte Alpage de La Peule"),
+    (60, "Hôtel du Col de la Forclaz"),
+    (62, "Hôtel Edelweiss"),
+    (64, "Chalet Alpin du Tour"),
+    (67, "Gîte Le Moulin"),
+    (69, "Gîte Michel Fagot"),
+    (71, "Hôtel Chalet Val Ferret"),
+    (72, "Pension en Plein Air"),
+    (76, "Auberge-Refuge de la Nova"),
+    (93, "Gîte d'Alpage Les Ecuries de Charamillon"),
+    (96, "Auberge des Glaciers"),
 ]
 
-REGION2 = [
-    "Rifugio G. Bertone","Rifugio Monte Bianco - Cai Uget","Hôtel Lavachey",
-    "Hôtel Funivia","Rifugio Maison Vieille","Gite le Randonneur du Mont Blanc",
-    "Rifugio Chapy Mont-Blanc","Hôtel Chalet Val Ferret"
-]
-
-REGION3 = [
-    "Auberge la Grande Ourse","Hotel du Col de Fenêtre","Relais d'Arpette",
-    "Maya-Joie","Gîte La Léchère","Refuge Le Peuty","Gîte de la Fouly",
-    "Auberge Mont-Blanc","Auberge Gîte Bon Abri","Chalet 'Le Dolent'",
-    "Gîte Alpage de La Peule","Hôtel du Col de la Forclaz","Hôtel Edelweiss",
-    "Pension en Plein Air","Auberge des Glaciers","Chalet La Grange"
-]
+# Map names only
+name_to_id = {name: str(rid) for rid, name in refuge_list}
 
 POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
 HEADERS = {
@@ -47,10 +65,9 @@ HEADERS = {
 }
 
 # -------------------------
-# HELPER FUNCTIONS
+# Helper functions
 # -------------------------
 def parse_refuge_block(div):
-    """Parse a refuge HTML block into a dictionary"""
     h2 = div.select_one('.entete h2')
     name = h2.get_text(strip=True) if h2 else ""
     altitude = ""
@@ -59,10 +76,13 @@ def parse_refuge_block(div):
         if span_alt:
             altitude = span_alt.get_text(strip=True)
             name = name.replace(span_alt.get_text(), "").strip()
+
     location = div.select_one('.Lieu')
     location = location.get_text(strip=True) if location else ""
+
     capacity_total_span = div.select_one('.capacitetotale span.valeur')
     capacity_total = capacity_total_span.get_text(strip=True) if capacity_total_span else ""
+
     dispo_div = div.select_one('.capacitedispo')
     available_beds = ""
     available_date = ""
@@ -74,6 +94,7 @@ def parse_refuge_block(div):
         beds_match = re.search(r'(\d+)\s*beds', text, re.I)
         if beds_match:
             available_beds = beds_match.group(1)
+
     return {
         "name": name,
         "altitude": altitude,
@@ -83,17 +104,21 @@ def parse_refuge_block(div):
         "available_date": available_date
     }
 
-def generate_date_range(center_date, days=5):
-    """Generate a list of dates ±days around center_date"""
-    return [(center_date + timedelta(days=i)).strftime("%d/%m/%Y") for i in range(-days, days+1)]
+def generate_date_range(center_date_str):
+    try:
+        center_date = datetime.strptime(center_date_str, "%d/%m/%Y")
+    except ValueError:
+        st.error("Invalid start date format. Use dd/mm/yyyy.")
+        return []
 
-def run_scraper(selected_refuges, selected_dates):
-    """Scrape the website and filter results by selected names"""
+    return [(center_date + timedelta(days=i)).strftime("%d/%m/%Y") for i in range(-5, 6)]
+
+def run_scraper(selected_names, selected_dates):
     session = requests.Session()
     all_results = []
 
     for date_input in selected_dates:
-        day, month, year = date_input.split('/')
+        day, month, year = date_input.split("/")
 
         post_data = {
             "NumEtape": "2",
@@ -101,7 +126,7 @@ def run_scraper(selected_refuges, selected_dates):
             "Globales/JourDebut": day,
             "Globales/MoisDebut": month,
             "Globales/AnDebut": year,
-            "Globales/ListeIdFournisseur": ",".join([str(i) for i in range(1,500000)]),  # all IDs placeholder
+            "Globales/ListeIdFournisseur": ",".join(name_to_id.values()),
             "Param/ListeIdService": "1,2",
             "Param/NbPers": "1",
             "Param/DateRech": date_input
@@ -115,10 +140,11 @@ def run_scraper(selected_refuges, selected_dates):
             for colphoto_div in soup.select('div.colphoto'):
                 parent_div = colphoto_div.parent.parent
                 if parent_div:
-                    refuge_info = parse_refuge_block(parent_div)
-                    if refuge_info["name"] in selected_refuges:
-                        refuge_info["query_date"] = date_input
-                        all_results.append(refuge_info)
+                    info = parse_refuge_block(parent_div)
+                    if info["name"] in selected_names:
+                        info["query_date"] = date_input
+                        all_results.append(info)
+
         except Exception as e:
             st.warning(f"Error scraping {date_input}: {e}")
 
@@ -136,35 +162,38 @@ def run_scraper(selected_refuges, selected_dates):
         st.download_button(
             label="Download Excel",
             data=excel_data,
-            file_name=f"{TITLE}.xlsx",
+            file_name="Mont Blanc Refuge Availability.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
         st.info("No results found for the selected refuges and dates.")
 
 # -------------------------
-# STREAMLIT UI
+# Streamlit UI
 # -------------------------
-st.image(LOGO_PATH, width=150)
-st.title(TITLE)
+st.title("Mont Blanc Refuge Availability Scraper")
 
-col1, col2, col3 = st.columns(3)
-with col1:
-    selected_region1 = st.multiselect("French Refuges", sorted(REGION1))
-with col2:
-    selected_region2 = st.multiselect("Italian Refuges", sorted(REGION2))
-with col3:
-    selected_region3 = st.multiselect("Swiss Refuges", sorted(REGION3))
+# Refuge selection by name only
+selected_refuges = st.multiselect(
+    "Select Refuge(s):",
+    options=[name for _, name in refuge_list]
+)
 
-selected_refuges = selected_region1 + selected_region2 + selected_region3
+# Date input
+start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
+selected_dates = []
+if start_date_str:
+    selected_dates = st.multiselect(
+        "Select Dates to Check:",
+        options=generate_date_range(start_date_str),
+        default=generate_date_range(start_date_str)
+    )
 
-start_date = st.date_input("Select Main Start Date")
-selected_dates = generate_date_range(start_date)
-
-st.write("Checking availability for dates:", ", ".join(selected_dates))
-
+# Run scraper
 if st.button("Run Scraper"):
     if not selected_refuges:
         st.warning("Please select at least one refuge.")
+    elif not selected_dates:
+        st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
