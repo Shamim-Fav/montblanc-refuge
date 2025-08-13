@@ -55,11 +55,7 @@ refuge_list = [
     (96, "Auberge des Glaciers"),
 ]
 
-# Define regions by names
-region_french = [name for _, name in refuge_list if "French" not in _]  # adjust manually
-region_italian = [name for _, name in refuge_list if "Italian" not in _]  # adjust manually
-region_swiss = [name for _, name in refuge_list if "Swiss" not in _]  # adjust manually
-
+# Mapping for filtering by name
 name_to_id = {name: str(rid) for rid, name in refuge_list}
 
 POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
@@ -71,7 +67,60 @@ HEADERS = {
 }
 
 # -------------------------
-# Helper functions
+# Region Lists
+# -------------------------
+region_french = [
+    "Gîte le Pontet",
+    "Chalet Les Méandres (ex Tupilak)",
+    "Gîte Mermoud",
+    "Refuge de Nant Borrant",
+    "Refuge du Fioux",
+    "Les Chambres du Soleil",
+    "Refuge des Prés",
+    "Gîte Les Mélèzes",
+    "La Ferme à Piron",
+    "Refuge des Mottets",
+    "Refuge de la Balme",
+    "Auberge du Truc",
+    "Auberge la Boërne",
+    "Chalet Alpin du Tour",
+    "Gîte Le Moulin",
+    "Gîte Michel Fagot",
+    "Auberge-Refuge de la Nova",
+    "Gîte d'Alpage Les Ecuries de Charamillon"
+]
+
+region_italian = [
+    "Rifugio G. Bertone",
+    "Rifugio Monte Bianco - Cai Uget",
+    "Hôtel Lavachey",
+    "Hôtel Funivia",
+    "Rifugio Maison Vieille",
+    "Gite le Randonneur du Mont Blanc",
+    "Rifugio Chapy Mont-Blanc",
+    "Hôtel Chalet Val Ferret"
+]
+
+region_swiss = [
+    "Auberge la Grande Ourse",
+    "Hotel du Col de Fenêtre",
+    "Relais d'Arpette",
+    "Maya-Joie",
+    "Gîte La Léchère",
+    "Refuge Le Peuty",
+    "Gîte de la Fouly",
+    "Auberge Mont-Blanc",
+    "Auberge Gîte Bon Abri",
+    "Chalet 'Le Dolent'",
+    "Gîte Alpage de La Peule",
+    "Hôtel du Col de la Forclaz",
+    "Hôtel Edelweiss",
+    "Pension en Plein Air",
+    "Auberge des Glaciers"
+]
+
+# -------------------------
+# Helper Functions
 # -------------------------
 def parse_refuge_block(div):
     refuge_id = None
@@ -125,11 +174,7 @@ def generate_date_range(center_date_str):
         st.error("Invalid start date format. Use dd/mm/yyyy.")
         return []
 
-    date_list = []
-    for offset in range(-5, 6):
-        dt = center_date + timedelta(days=offset)
-        date_list.append(dt.strftime("%d/%m/%Y"))
-    return date_list
+    return [(center_date + timedelta(days=i)).strftime("%d/%m/%Y") for i in range(-5,6)]
 
 def run_scraper(selected_names, selected_dates):
     session = requests.Session()
@@ -180,27 +225,24 @@ def run_scraper(selected_names, selected_dates):
         if not success:
             st.error(f"Failed to get data for {date_input} after 3 attempts.")
 
-    # Filter by names only
+    # Filter by selected names
     filtered_results = [r for r in all_results if r["name"] in selected_names]
 
     if filtered_results:
         df = pd.DataFrame(filtered_results)
-        df.insert(0, "S/N", range(1, len(df) + 1))  # Serial column starting from 1
+        df.insert(0, "S.No", range(1, len(df)+1))
+        st.dataframe(df)
 
-        # Excel download
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
-            df.to_excel(writer, index=False, sheet_name='Availability')
-        output.seek(0)
-
+            df.to_excel(writer, index=False, sheet_name="Availability")
+            writer.save()
         st.download_button(
             label="Download Excel",
-            data=output,
+            data=output.getvalue(),
             file_name="Mont Blanc Refuge Availability.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
-
-        st.dataframe(df)
     else:
         st.info("No results found for the selected refuges and dates.")
 
@@ -210,23 +252,19 @@ def run_scraper(selected_names, selected_dates):
 st.image("BTA_LOGO_square.webp", width=120)
 st.title("Mont Blanc Refuge Availability")
 
-# Region logos
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.image("logo_french.png", width=80)
-    st.caption("French Refuges")
-with col2:
-    st.image("logo_italian.png", width=80)
-    st.caption("Italian Refuges")
-with col3:
-    st.image("logo_swiss.png", width=80)
-    st.caption("Swiss Refuges")
-
-# Refuge selection
+st.write("### French Refuges")
+st.image("logo_french.png", width=80)
 selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
+
+st.write("### Italian Refuges")
+st.image("logo_italian.png", width=80)
 selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
+
+st.write("### Swiss Refuges")
+st.image("logo_swiss.png", width=80)
 selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
 
+# Combine all selections
 selected_refuges = selected_french + selected_italian + selected_swiss
 
 # Date input
