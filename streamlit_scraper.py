@@ -1,16 +1,12 @@
-# save as streamlit_scraper.py
 import streamlit as st
 from datetime import datetime, timedelta
 import requests
 from bs4 import BeautifulSoup
-import csv
-import io
+import pandas as pd
 import time
 import re
 
-st.set_page_config(page_title="Refuge Availability Scraper")
-
-# === Constants ===
+# ======== Constants ========
 REFUGE_IDS = "32383,32365,123462,127958,32357,32358,32356,32369,32372,39948,32361,39796,39797,32362,116702,32379,32378,36470,67403,32789,32368,116701,32367,32366,32405,39703,32406,32404,32398,32395,114712,32394,46179,32399,32397,32396,32403,32400,32401,32393,32391,32385,32390,32388,32389,32386,36471,32377,133634"
 
 refuge_list = [
@@ -68,7 +64,7 @@ HEADERS = {
     "Referer": "https://www.montourdumontblanc.com/",
 }
 
-# === Parsing ===
+# ======== Functions ========
 def parse_refuge_block(div):
     refuge_id = None
     map_btn = div.select_one('a.bouton.carte')
@@ -114,7 +110,6 @@ def parse_refuge_block(div):
         "available_date": available_date
     }
 
-# === Scraper ===
 def run_scraper(selected_ids, selected_dates):
     session = requests.Session()
     all_results = []
@@ -130,7 +125,7 @@ def run_scraper(selected_ids, selected_dates):
         month = current_date.strftime("%m")
         year = current_date.strftime("%Y")
 
-        st.info(f"Checking availability for {date_input}...")
+        st.text(f"Checking availability for {date_input}...")
 
         post_data = {
             "NumEtape": "2",
@@ -172,35 +167,55 @@ def run_scraper(selected_ids, selected_dates):
     filtered_results = [r for r in all_results if r["id"] in selected_ids]
 
     if filtered_results:
-        # Prepare CSV for download
-        output = io.StringIO()
-        keys = ["query_date", "id", "name", "altitude", "location", "capacity_total", "available_beds", "available_date"]
-        writer = csv.DictWriter(output, fieldnames=keys)
-        writer.writeheader()
-        writer.writerows(filtered_results)
-        output.seek(0)
+        df = pd.DataFrame(filtered_results)
         st.success("Filtered results ready!")
-        st.download_button("Download CSV", output, file_name="filtered_availability_results.csv")
-    else:
-        st.warning("No results found for the selected refuges and dates.")
 
-# === Streamlit UI ===
-st.title("Refuge Availability Scraper")
+        # ✅ Correct way to make download button
+        csv_data = df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Download CSV",
+            data=csv_data,
+            file_name="filtered_availability_results.csv",
+            mime="text/csv"
+        )
+
+    else:
+        st.info("No results found for the selected refuges and dates.")
+
+def generate_date_range(center_date_str):
+    try:
+        center_date = datetime.strptime(center_date_str, "%d/%m/%Y")
+    except ValueError:
+        st.error("Invalid start date format. Use dd/mm/yyyy.")
+        return []
+
+    date_list = []
+    for offset in range(-5, 6):  # ±5 days
+        dt = center_date + timedelta(days=offset)
+        date_list.append(dt.strftime("%d/%m/%Y"))
+    return date_list
+
+# ======== Streamlit UI ========
+st.title("Mont Blanc Refuge Availability Scraper")
 
 selected_refuges = st.multiselect(
     "Select Refuge(s):",
-    options=[name for _, name in refuge_list],
-    default=[name for _, name in refuge_list[:3]]  # optional default selection
+    [name for _, name in refuge_list]
 )
 
-start_date = st.date_input("Select main start date")
+start_date = st.text_input("Enter Main Start Date (dd/mm/yyyy):")
 
-# Generate ±5 days automatically
-selected_dates = [(start_date + timedelta(days=offset)).strftime("%d/%m/%Y") for offset in range(-5, 6)]
+if st.button("Generate Dates ±5 Days"):
+    dates = generate_date_range(start_date)
+    selected_dates = st.multiselect("Select Dates to Check:", dates, default=dates)
+else:
+    selected_dates = []
 
 if st.button("Run Scraper"):
     if not selected_refuges:
         st.warning("Please select at least one refuge.")
+    elif not selected_dates:
+        st.warning("Please select at least one date.")
     else:
         selected_ids = [name_to_id[name] for name in selected_refuges]
         run_scraper(selected_ids, selected_dates)
