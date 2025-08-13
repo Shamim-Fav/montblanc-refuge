@@ -136,7 +136,6 @@ def run_scraper(selected_names, selected_dates):
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Availability')
-            writer.save()
         excel_data = output.getvalue()
         st.download_button(
             label="Download Excel",
@@ -154,14 +153,19 @@ def run_scraper(selected_names, selected_dates):
 st.image("BTA_LOGO_square.webp", width=150)
 st.title("Mont Blanc Refuge Availability")
 
-# Side-by-side multiselects for three regions
+# Side-by-side multiselects for three regions with logos
 col1, col2, col3 = st.columns(3)
 
 with col1:
+    st.image("logo_french.png", width=80)  # French region logo
     selected_french = st.multiselect("French Refuges", options=sorted(region_french))
+
 with col2:
+    st.image("logo_italian.png", width=80)  # Italian region logo
     selected_italian = st.multiselect("Italian Refuges", options=sorted(region_italian))
+
 with col3:
+    st.image("logo_swiss.png", width=80)  # Swiss region logo
     selected_swiss = st.multiselect("Swiss Refuges", options=sorted(region_swiss))
 
 selected_refuges = selected_french + selected_italian + selected_swiss
