@@ -55,8 +55,31 @@ refuge_list = [
     (96, "Auberge des Glaciers"),
 ]
 
-# Mapping for filtering by name
 name_to_id = {name: str(rid) for rid, name in refuge_list}
+
+# Define regions
+region_french = [
+    "Gîte le Pontet", "Chalet Les Méandres (ex Tupilak)", "Gîte Mermoud",
+    "Refuge de Nant Borrant", "Refuge du Fioux", "Les Chambres du Soleil",
+    "Refuge des Prés", "Gîte Les Mélèzes", "La Ferme à Piron", "Refuge des Mottets",
+    "Refuge de la Balme", "Auberge du Truc", "Auberge la Boërne",
+    "Chalet Alpin du Tour", "Gîte Le Moulin", "Gîte Michel Fagot",
+    "Auberge-Refuge de la Nova", "Gîte d'Alpage Les Ecuries de Charamillon"
+]
+
+region_italian = [
+    "Rifugio G. Bertone", "Rifugio Monte Bianco - Cai Uget", "Hôtel Lavachey",
+    "Hôtel Funivia", "Rifugio Maison Vieille", "Gite le Randonneur du Mont Blanc",
+    "Rifugio Chapy Mont-Blanc", "Hôtel Chalet Val Ferret"
+]
+
+region_swiss = [
+    "Auberge la Grande Ourse", "Hotel du Col de Fenêtre", "Relais d'Arpette",
+    "Maya-Joie", "Gîte La Léchère", "Refuge Le Peuty", "Gîte de la Fouly",
+    "Auberge Mont-Blanc", "Auberge Gîte Bon Abri", "Chalet 'Le Dolent'",
+    "Gîte Alpage de La Peule", "Hôtel du Col de la Forclaz", "Hôtel Edelweiss",
+    "Pension en Plein Air", "Auberge des Glaciers"
+]
 
 POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
 HEADERS = {
@@ -67,60 +90,7 @@ HEADERS = {
 }
 
 # -------------------------
-# Region Lists
-# -------------------------
-region_french = [
-    "Gîte le Pontet",
-    "Chalet Les Méandres (ex Tupilak)",
-    "Gîte Mermoud",
-    "Refuge de Nant Borrant",
-    "Refuge du Fioux",
-    "Les Chambres du Soleil",
-    "Refuge des Prés",
-    "Gîte Les Mélèzes",
-    "La Ferme à Piron",
-    "Refuge des Mottets",
-    "Refuge de la Balme",
-    "Auberge du Truc",
-    "Auberge la Boërne",
-    "Chalet Alpin du Tour",
-    "Gîte Le Moulin",
-    "Gîte Michel Fagot",
-    "Auberge-Refuge de la Nova",
-    "Gîte d'Alpage Les Ecuries de Charamillon"
-]
-
-region_italian = [
-    "Rifugio G. Bertone",
-    "Rifugio Monte Bianco - Cai Uget",
-    "Hôtel Lavachey",
-    "Hôtel Funivia",
-    "Rifugio Maison Vieille",
-    "Gite le Randonneur du Mont Blanc",
-    "Rifugio Chapy Mont-Blanc",
-    "Hôtel Chalet Val Ferret"
-]
-
-region_swiss = [
-    "Auberge la Grande Ourse",
-    "Hotel du Col de Fenêtre",
-    "Relais d'Arpette",
-    "Maya-Joie",
-    "Gîte La Léchère",
-    "Refuge Le Peuty",
-    "Gîte de la Fouly",
-    "Auberge Mont-Blanc",
-    "Auberge Gîte Bon Abri",
-    "Chalet 'Le Dolent'",
-    "Gîte Alpage de La Peule",
-    "Hôtel du Col de la Forclaz",
-    "Hôtel Edelweiss",
-    "Pension en Plein Air",
-    "Auberge des Glaciers"
-]
-
-# -------------------------
-# Helper Functions
+# Helper functions
 # -------------------------
 def parse_refuge_block(div):
     refuge_id = None
@@ -174,7 +144,11 @@ def generate_date_range(center_date_str):
         st.error("Invalid start date format. Use dd/mm/yyyy.")
         return []
 
-    return [(center_date + timedelta(days=i)).strftime("%d/%m/%Y") for i in range(-5,6)]
+    date_list = []
+    for offset in range(-5, 6):
+        dt = center_date + timedelta(days=offset)
+        date_list.append(dt.strftime("%d/%m/%Y"))
+    return date_list
 
 def run_scraper(selected_names, selected_dates):
     session = requests.Session()
@@ -225,13 +199,11 @@ def run_scraper(selected_names, selected_dates):
         if not success:
             st.error(f"Failed to get data for {date_input} after 3 attempts.")
 
-    # Filter by selected names
     filtered_results = [r for r in all_results if r["name"] in selected_names]
 
     if filtered_results:
         df = pd.DataFrame(filtered_results)
-        df.insert(0, "S.No", range(1, len(df)+1))
-        st.dataframe(df)
+        df.insert(0, "S.No", range(1, len(df)+1))  # Add serial number starting from 1
 
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
@@ -243,6 +215,7 @@ def run_scraper(selected_names, selected_dates):
             file_name="Mont Blanc Refuge Availability.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+        st.dataframe(df)
     else:
         st.info("No results found for the selected refuges and dates.")
 
@@ -252,19 +225,22 @@ def run_scraper(selected_names, selected_dates):
 st.image("BTA_LOGO_square.webp", width=120)
 st.title("Mont Blanc Refuge Availability")
 
+# French region
 st.write("### French Refuges")
 st.image("logo_french.png", width=80)
-selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
+selected_french = st.multiselect("French Refuges", sorted(region_french), key="french")
 
+# Italian region
 st.write("### Italian Refuges")
 st.image("logo_italian.png", width=80)
-selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
+selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian")
 
+# Swiss region
 st.write("### Swiss Refuges")
 st.image("logo_swiss.png", width=80)
-selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
+selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss")
 
-# Combine all selections
+# Combine selected refuges
 selected_refuges = selected_french + selected_italian + selected_swiss
 
 # Date input
@@ -272,7 +248,11 @@ start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
 selected_dates = []
 if start_date_str:
     date_options = generate_date_range(start_date_str)
-    selected_dates = st.multiselect("Select Dates to Check:", options=date_options, default=date_options)
+    selected_dates = st.multiselect(
+        "Select Dates to Check",
+        options=date_options,
+        default=date_options
+    )
 
 # Run scraper
 if st.button("Run Scraper"):
