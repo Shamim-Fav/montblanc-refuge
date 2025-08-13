@@ -228,13 +228,13 @@ st.image("BTA_LOGO_square.webp", width=150)
 # Three columns with logos
 col1, col2, col3 = st.columns(3)
 with col1:
-    st.image("logo_french.webp", width=80)
+    st.image("logo_french.png", width=80)
     selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
 with col2:
-    st.image("logo_italian.webp", width=80)
+    st.image("logo_italian.png", width=80)
     selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
 with col3:
-    st.image("logo_swiss.webp", width=80)
+    st.image("logo_swiss.png", width=80)
     selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
 
 selected_refuges = selected_french + selected_italian + selected_swiss
@@ -258,3 +258,4 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
+
