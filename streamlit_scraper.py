@@ -9,6 +9,8 @@ from io import BytesIO
 # -------------------------
 # Configuration
 # -------------------------
+REFUGE_IDS = "32383,32365,123462,127958,32357,32358,32356,32369,32372,39948,32361,39796,39797,32362,116702,32379,32378,36470,67403,32789,32368,116701,32367,32366,32405,39703,32406,32404,32398,32395,114712,32394,46179,32399,32397,32396,32403,32400,32401,32393,32391,32385,32390,32388,32389,32386,36471,32377,133634"
+
 refuge_list = [
     (156, "Auberge la Grande Ourse"),
     (162, "Gîte le Pontet"),
@@ -54,14 +56,15 @@ refuge_list = [
 ]
 
 # -------------------------
-# Region lists
+# Regions
 # -------------------------
 region_french = [
-    "Gîte le Pontet","Chalet Les Méandres (ex Tupilak)","Gîte Mermoud","Refuge de Nant Borrant",
-    "Refuge du Fioux","Les Chambres du Soleil","Refuge des Prés","Gîte Les Mélèzes",
-    "La Ferme à Piron","Refuge des Mottets","Refuge de la Balme","Auberge du Truc",
-    "Auberge la Boërne","Chalet Alpin du Tour","Gîte Le Moulin","Gîte Michel Fagot",
-    "Auberge-Refuge de la Nova","Gîte d'Alpage Les Ecuries de Charamillon"
+    "Gîte le Pontet","Chalet Les Méandres (ex Tupilak)","Gîte Mermoud",
+    "Refuge de Nant Borrant","Refuge du Fioux","Les Chambres du Soleil",
+    "Refuge des Prés","Gîte Les Mélèzes","La Ferme à Piron",
+    "Refuge des Mottets","Refuge de la Balme","Auberge du Truc",
+    "Auberge la Boërne","Chalet Alpin du Tour","Gîte Le Moulin",
+    "Gîte Michel Fagot","Auberge-Refuge de la Nova","Gîte d'Alpage Les Ecuries de Charamillon"
 ]
 
 region_italian = [
@@ -170,7 +173,7 @@ def run_scraper(selected_names, selected_dates):
             "Globales/JourDebut": day,
             "Globales/MoisDebut": month,
             "Globales/AnDebut": year,
-            "Globales/ListeIdFournisseur": ",".join(name_to_id.values()),
+            "Globales/ListeIdFournisseur": REFUGE_IDS,
             "Param/ListeIdService": "1,2",
             "Param/NbPers": "1",
             "Param/DateRech": date_input
@@ -187,7 +190,7 @@ def run_scraper(selected_names, selected_dates):
                     parent_div = colphoto_div.parent.parent
                     if parent_div:
                         refuge_info = parse_refuge_block(parent_div)
-                        if refuge_info["name"] in selected_names:
+                        if refuge_info["id"]:
                             refuge_info['query_date'] = date_input
                             all_results.append(refuge_info)
                 success = True
@@ -198,21 +201,26 @@ def run_scraper(selected_names, selected_dates):
         if not success:
             st.error(f"Failed to get data for {date_input} after 3 attempts.")
 
-    if all_results:
-        df = pd.DataFrame(all_results)
-        df.insert(0, "S.No", range(1, len(df)+1))
+    # Filter by name only
+    filtered_results = [r for r in all_results if r["name"] in selected_names]
+
+    if filtered_results:
+        df = pd.DataFrame(filtered_results)
+        df.insert(0, "S.No", range(1, len(df)+1))  # Serial starting from 1
         st.success("Filtered results ready!")
 
-        # Download Excel
+        # Excel download
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name="Availability")
+        output.seek(0)
         st.download_button(
             label="Download Excel",
-            data=output.getvalue(),
+            data=output,
             file_name="Mont Blanc Refuge Availability.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
+
         st.dataframe(df)
     else:
         st.info("No results found for the selected refuges and dates.")
@@ -222,35 +230,31 @@ def run_scraper(selected_names, selected_dates):
 # -------------------------
 st.title("Mont Blanc Refuge Availability")
 
-# Display logo at the top
-st.image("BTA_LOGO_square.webp", width=150)
+col1, col2, col3 = st.columns([1,1,1])
 
-# Three columns with logos
-col1, col2, col3 = st.columns(3)
 with col1:
-    st.image("logo_french.png", width=80)
-    selected_french = st.multiselect("French Refuges", sorted(region_french), key="french", height=200)
-with col2:
-    st.image("logo_italian.png", width=80)
-    selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian", height=200)
-with col3:
-    st.image("logo_swiss.png", width=80)
-    selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss", height=200)
+    st.image("french_logo.png", width=80)
+    selected_french = st.multiselect("French Refuges", sorted(region_french), key="french")
 
+with col2:
+    st.image("italian_logo.png", width=80)
+    selected_italian = st.multiselect("Italian Refuges", sorted(region_italian), key="italian")
+
+with col3:
+    st.image("swiss_logo.png", width=80)
+    selected_swiss = st.multiselect("Swiss Refuges", sorted(region_swiss), key="swiss")
+
+# Merge selected
 selected_refuges = selected_french + selected_italian + selected_swiss
 
-# Date input and generation
+# Date input
 start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
 selected_dates = []
 if start_date_str:
     date_options = generate_date_range(start_date_str)
-    selected_dates = st.multiselect(
-        "Select Dates to Check:",
-        options=date_options,
-        default=date_options
-    )
+    selected_dates = st.multiselect("Select Dates to Check", options=date_options, default=date_options)
 
-# Run scraper button
+# Run scraper
 if st.button("Run Scraper"):
     if not selected_refuges:
         st.warning("Please select at least one refuge.")
@@ -258,4 +262,3 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
-
