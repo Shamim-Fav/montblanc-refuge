@@ -75,7 +75,7 @@ def parse_refuge_block(div):
             available_beds = beds_match.group(1)
 
     return {
-        "name": name,
+        "name": Name,
         "altitude": altitude,
         "location": location,
         "capacity_total": capacity_total,
@@ -156,7 +156,7 @@ def run_scraper(selected_names, selected_dates):
 # Logo + Title
 col_logo, col_title, _ = st.columns([1,5,1])
 with col_logo:
-    st.image("BTA_LOGO_square.webp", width=80)
+    st.image("BTA_LOGO_square.webp", width=70)
 with col_title:
     st.title("Mont Blanc Refuge Availability")
 
@@ -194,4 +194,5 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
+
 
