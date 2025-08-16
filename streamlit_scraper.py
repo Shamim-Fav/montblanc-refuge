@@ -75,7 +75,7 @@ def parse_refuge_block(div):
             available_beds = beds_match.group(1)
 
     return {
-        "Name": name,
+        "name": name,
         "altitude": altitude,
         "location": location,
         "capacity_total": capacity_total,
@@ -134,7 +134,7 @@ def run_scraper(selected_names, selected_dates):
         df.insert(0, "S.No", range(1, len(df) + 1))
 
         st.success(f"Found {len(df)} results!")
-        st.dataframe(df[['S.No','name','altitude','location','capacity_total','available_beds','available_date']])
+        st.dataframe(df[['S.No','Name','Altitude','Location','Capacity_Total','Available_Beds','Available_Date']])
 
         # Excel download
         output = BytesIO()
@@ -156,7 +156,7 @@ def run_scraper(selected_names, selected_dates):
 # Logo + Title
 col_logo, col_title, _ = st.columns([1,5,1])
 with col_logo:
-    st.image("BTA_LOGO_square.webp", width=70)
+    st.image("BTA_LOGO_square.webp", width=80)
 with col_title:
     st.title("Mont Blanc Refuge Availability")
 
@@ -194,6 +194,7 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
+
 
 
 
