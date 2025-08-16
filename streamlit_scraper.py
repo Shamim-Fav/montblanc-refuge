@@ -75,7 +75,7 @@ def parse_refuge_block(div):
             available_beds = beds_match.group(1)
 
     return {
-        "name": Name,
+        "Name": name,
         "altitude": altitude,
         "location": location,
         "capacity_total": capacity_total,
@@ -194,5 +194,6 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
+
 
 
