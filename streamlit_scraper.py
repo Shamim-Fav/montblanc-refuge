@@ -130,11 +130,14 @@ def run_scraper(selected_names, selected_dates):
     if all_results:
         df = pd.DataFrame(all_results)
 
-        # Add serial starting from 1
-        df.insert(0, "S.No", range(1, len(df) + 1))
+        # Rename columns to Title Case
+        df.rename(columns=lambda x: x.replace("_", " ").title(), inplace=True)
+
+        # Add serial starting from 1 (No.)
+        df.insert(0, "No.", range(1, len(df) + 1))
 
         st.success(f"Found {len(df)} results!")
-        st.dataframe(df[['S.No','Name','Altitude','Location','Capacity_Total','Available_Beds','Available_Date']])
+        st.dataframe(df[['No.','Name','Altitude','Location','Capacity Total','Available Beds','Available Date','Query Date']])
 
         # Excel download
         output = BytesIO()
@@ -194,7 +197,3 @@ if st.button("Run Scraper"):
         st.warning("Please select at least one date.")
     else:
         run_scraper(selected_refuges, selected_dates)
-
-
-
-
