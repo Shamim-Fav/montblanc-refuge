@@ -1,119 +1,196 @@
-# app.py
 import streamlit as st
-import pandas as pd
 import requests
-from datetime import timedelta
+from bs4 import BeautifulSoup
+import re
+from datetime import datetime, timedelta
+import pandas as pd
 from io import BytesIO
-import time
 
-# ----------------------
-# Streamlit UI: Logo + Title
-# ----------------------
-col_logo, col_title, _ = st.columns([1, 5, 1])
-with col_logo:
-    st.image("logo.png", width=100)  # Make sure logo.png is in the same folder as app.py
-with col_title:
-    st.title("Hong Kong – Mandarin Oriental Availability Checker")
+# -------------------------
+# Configuration
+# -------------------------
+REFUGE_IDS = "32383,32365,123462,127958,32357,32358,32356,32369,32372,39948,32361,39796,39797,32362,116702,32379,32378,36470,67403,32789,32368,116701,32367,32366,32405,39703,32406,32404,32398,32395,114712,32394,46179,32399,32397,32396,32403,32400,32401,32393,32391,32385,32390,32388,32389,32386,36471,32377,133634"
 
-st.info("This app checks room availability for **Hong Kong – Mandarin Oriental**")
+# Regions with refuge names
+region_french = [
+    "Gîte le Pontet", "Chalet Les Méandres (ex Tupilak)", "Gîte Mermoud", 
+    "Refuge de Nant Borrant", "Refuge du Fioux", "Les Chambres du Soleil",
+    "Refuge des Prés", "Gîte Les Mélèzes", "La Ferme à Piron", "Refuge des Mottets",
+    "Refuge de la Balme", "Auberge du Truc", "Auberge la Boërne", "Chalet Alpin du Tour",
+    "Gîte Le Moulin", "Gîte Michel Fagot", "Auberge-Refuge de la Nova",
+    "Gîte d'Alpage Les Ecuries de Charamillon"
+]
 
-# ----------------------
-# Date inputs
-# ----------------------
-start_date = st.date_input("Select start date for checking availability")
-num_days = st.number_input("How many days to check?", min_value=1, max_value=365, value=60)
+region_italian = [
+    "Rifugio G. Bertone", "Rifugio Monte Bianco - Cai Uget", "Hôtel Lavachey", 
+    "Hôtel Funivia", "Rifugio Maison Vieille", "Gite le Randonneur du Mont Blanc",
+    "Rifugio Chapy Mont-Blanc", "Hôtel Chalet Val Ferret"
+]
 
-# ----------------------
-# API setup
-# ----------------------
-API_URL = "https://www.mandarinoriental.com/api/v1/booking/check-room-availability"
+region_swiss = [
+    "Auberge la Grande Ourse", "Hotel du Col de Fenêtre", "Relais d'Arpette",
+    "Maya-Joie", "Gîte La Léchère", "Refuge Le Peuty", "Gîte de la Fouly",
+    "Auberge Mont-Blanc", "Auberge Gîte Bon Abri", "Chalet 'Le Dolent'",
+    "Gîte Alpage de La Peule", "Hôtel du Col de la Forclaz", "Hôtel Edelweiss",
+    "Pension en Plein Air", "Auberge des Glaciers", "Chalet La Grange"
+]
 
+POST_URL = "https://reservation.montourdumontblanc.com/z7243_uk-.aspx"
 HEADERS = {
-    "Content-Type": "application/json;charset=UTF-8",
-    "Cookie": "YOUR_CURRENT_COOKIE_HERE",
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36"
+    "User-Agent": "Mozilla/5.0",
+    "Content-Type": "application/x-www-form-urlencoded",
+    "Origin": "https://www.montourdumontblanc.com",
+    "Referer": "https://www.montourdumontblanc.com/",
 }
 
-def fetch_availability(hotel_id, check_date):
-    payload = {
-        "hotelCode": str(hotel_id),
-        "roomCodes": None,
-        "roomName": None,
-        "bedType": None,
-        "rateCode": None,
-        "adultGuestCount": "2",
-        "childGuestCount": "0",
-        "stayDateStart": check_date.strftime("%Y-%m-%d"),
-        "stayDateEnd": (check_date + timedelta(days=1)).strftime("%Y-%m-%d"),
-        "primaryLanguageId": "en"
+# -------------------------
+# Helper functions
+# -------------------------
+def parse_refuge_block(div):
+    h2 = div.select_one('.entete h2')
+    name = h2.get_text(strip=True) if h2 else ""
+    altitude = ""
+    if h2:
+        span_alt = h2.select_one('span.altitude')
+        if span_alt:
+            altitude = span_alt.get_text(strip=True)
+            name = name.replace(span_alt.get_text(), "").strip()
+
+    location = div.select_one('.Lieu')
+    location = location.get_text(strip=True) if location else ""
+
+    capacity_total_span = div.select_one('.capacitetotale span.valeur')
+    capacity_total = capacity_total_span.get_text(strip=True) if capacity_total_span else ""
+
+    dispo_div = div.select_one('.capacitedispo')
+    available_beds = ""
+    available_date = ""
+    if dispo_div:
+        text = dispo_div.get_text(strip=True)
+        date_match = re.search(r'\(([^)]+)\)', text)
+        if date_match:
+            available_date = date_match.group(1)
+        beds_match = re.search(r'(\d+)\s*beds', text, re.I)
+        if beds_match:
+            available_beds = beds_match.group(1)
+
+    return {
+        "name": name,
+        "altitude": altitude,
+        "location": location,
+        "capacity_total": capacity_total,
+        "available_beds": available_beds,
+        "available_date": available_date
     }
-    response = requests.post(API_URL, headers=HEADERS, json=payload)
-    if response.status_code == 200:
-        return response.json()
-    else:
-        st.error(f"HTTP {response.status_code} for hotel {hotel_id} on {check_date}")
-        return None
 
-def parse_response(hotel_id, check_date, data):
-    if not data or not data.get("roomStays"):
+def generate_date_range(center_date_str):
+    try:
+        center_date = datetime.strptime(center_date_str, "%d/%m/%Y")
+    except ValueError:
+        st.error("Invalid start date format. Use dd/mm/yyyy.")
         return []
-    rows = []
-    for room in data["roomStays"]:
-        for rate in room.get("rates", []):
-            rows.append({
-                "Hotel Name": "Mandarin Oriental",
-                "HotelID": hotel_id,
-                "Date": check_date.strftime("%Y-%m-%d"),
-                "RoomType": room.get("title"),
-                "Total": rate.get("total"),
-                "Taxes": rate.get("taxes"),
-                "Fees": rate.get("fees"),
-                "MaxGuests": room.get("maxGuests"),
-                "ShortDescription": rate.get("shortDescription"),
-                "LongDescription": rate.get("longDescription"),
-                "Image": rate.get("image")
-            })
-    return rows
 
-# ----------------------
-# Main logic
-# ----------------------
-if st.button("Start Checking"):
-    hotel_id = 514
-    all_rows = []
+    return [(center_date + timedelta(days=i)).strftime("%d/%m/%Y") for i in range(-5, 6)]
 
-    progress_bar = st.progress(0)
-    status_text = st.empty()
-    start_time = time.time()
+def run_scraper(selected_names, selected_dates):
+    session = requests.Session()
+    all_results = []
 
-    for day_offset in range(num_days):
-        check_date = pd.to_datetime(start_date) + timedelta(days=day_offset)
-        data = fetch_availability(hotel_id, check_date)
-        parsed_rows = parse_response(hotel_id, check_date, data)
-        if parsed_rows:
-            all_rows.extend(parsed_rows)
+    for date_input in selected_dates:
+        day, month, year = date_input.split("/")
 
-        # Update progress bar and estimated time remaining
-        progress = (day_offset + 1) / num_days
-        progress_bar.progress(progress)
-        elapsed_time = time.time() - start_time
-        estimated_total_time = elapsed_time / progress
-        remaining_time = estimated_total_time - elapsed_time
-        status_text.text(f"{int(progress*100)}% completed – Estimated time remaining: {int(remaining_time)}s")
+        post_data = {
+            "NumEtape": "2",
+            "OSRecherche_caldatedeb4189": date_input,
+            "Globales/JourDebut": day,
+            "Globales/MoisDebut": month,
+            "Globales/AnDebut": year,
+            "Globales/ListeIdFournisseur": REFUGE_IDS,  # keep all IDs
+            "Param/ListeIdService": "1,2",
+            "Param/NbPers": "1",
+            "Param/DateRech": date_input
+        }
 
-    status_text.text("Checking complete!")
+        try:
+            response = session.post(POST_URL, data=post_data, headers=HEADERS, timeout=10)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.text, "html.parser")
 
-    if all_rows:
-        result_df = pd.DataFrame(all_rows)
-        buffer = BytesIO()
-        result_df.to_excel(buffer, index=False)
-        buffer.seek(0)
+            for colphoto_div in soup.select('div.colphoto'):
+                parent_div = colphoto_div.parent.parent
+                if parent_div:
+                    info = parse_refuge_block(parent_div)
+                    if info["name"] in selected_names:
+                        info["query_date"] = date_input
+                        all_results.append(info)
+
+        except Exception as e:
+            st.warning(f"Error scraping {date_input}: {e}")
+
+    if all_results:
+        df = pd.DataFrame(all_results)
+
+        # Add serial starting from 1
+        df.insert(0, "S.No", range(1, len(df) + 1))
+
+        st.success(f"Found {len(df)} results!")
+        st.dataframe(df[['S.No','name','altitude','location','capacity_total','available_beds','available_date']])
+
+        # Excel download
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+            df.to_excel(writer, index=False, sheet_name='Availability')
+        excel_data = output.getvalue()
         st.download_button(
-            label="Download Results Excel",
-            data=buffer,
-            file_name="hongkong_mandarin_oriental_availability.xlsx",
+            label="Download Excel",
+            data=excel_data,
+            file_name="Mont Blanc Refuge Availability.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
     else:
-        st.info("No availability found.")
+        st.info("No results found for the selected refuges and dates.")
+
+# -------------------------
+# Streamlit UI
+# -------------------------
+# Logo + Title
+col_logo, col_title, _ = st.columns([1,5,1])
+with col_logo:
+    st.image("BTA_LOGO_square.webp", width=80)
+with col_title:
+    st.title("Mont Blanc Refuge Availability")
+
+# Side-by-side multiselects for three regions with logos
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.image("logo_french.png", width=80)
+    selected_french = st.multiselect("French Refuges", options=sorted(region_french))
+with col2:
+    st.image("logo_italian.png", width=80)
+    selected_italian = st.multiselect("Italian Refuges", options=sorted(region_italian))
+with col3:
+    st.image("logo_swiss.png", width=80)
+    selected_swiss = st.multiselect("Swiss Refuges", options=sorted(region_swiss))
+
+selected_refuges = selected_french + selected_italian + selected_swiss
+
+# Date input
+start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
+selected_dates = []
+if start_date_str:
+    date_options = generate_date_range(start_date_str)
+    selected_dates = st.multiselect(
+        "Select Dates to Check:",
+        options=date_options,
+        default=date_options
+    )
+
+# Run scraper
+if st.button("Run Scraper"):
+    if not selected_refuges:
+        st.warning("Please select at least one refuge.")
+    elif not selected_dates:
+        st.warning("Please select at least one date.")
+    else:
+        run_scraper(selected_refuges, selected_dates)
