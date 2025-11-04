@@ -11,7 +11,6 @@ from io import BytesIO
 # -------------------------
 REFUGE_IDS = "32383,32365,123462,127958,32357,32358,32356,32369,32372,39948,32361,39796,39797,32362,116702,32379,32378,36470,67403,32789,32368,116701,32367,32366,32405,39703,32406,32404,32398,32395,114712,32394,46179,32399,32397,32396,32403,32400,32401,32393,32391,32385,32390,32388,32389,32386,36471,32377,133634"
 
-# Regions with refuge names
 region_french = [
     "Gîte le Pontet", "Chalet Les Méandres (ex Tupilak)", "Gîte Mermoud", 
     "Refuge de Nant Borrant", "Refuge du Fioux", "Les Chambres du Soleil",
@@ -89,14 +88,17 @@ def generate_date_range(center_date_str):
     except ValueError:
         st.error("Invalid start date format. Use dd/mm/yyyy.")
         return []
-
     return [(center_date + timedelta(days=i)).strftime("%d/%m/%Y") for i in range(-5, 6)]
 
 def run_scraper(selected_names, selected_dates):
     session = requests.Session()
     all_results = []
 
-    for date_input in selected_dates:
+    progress_bar = st.progress(0)
+    progress_text = st.empty()
+    total = len(selected_dates)
+
+    for idx, date_input in enumerate(selected_dates, start=1):
         day, month, year = date_input.split("/")
 
         post_data = {
@@ -105,7 +107,7 @@ def run_scraper(selected_names, selected_dates):
             "Globales/JourDebut": day,
             "Globales/MoisDebut": month,
             "Globales/AnDebut": year,
-            "Globales/ListeIdFournisseur": REFUGE_IDS,  # keep all IDs
+            "Globales/ListeIdFournisseur": REFUGE_IDS,
             "Param/ListeIdService": "1,2",
             "Param/NbPers": "1",
             "Param/DateRech": date_input
@@ -127,16 +129,18 @@ def run_scraper(selected_names, selected_dates):
         except Exception as e:
             st.warning(f"Error scraping {date_input}: {e}")
 
+        # Update progress
+        percent_complete = int((idx / total) * 100)
+        progress_bar.progress(percent_complete)
+        progress_text.text(f"Progress: {percent_complete}% ({idx}/{total} dates completed)")
+
     if all_results:
         df = pd.DataFrame(all_results)
-
-        # Add serial starting from 1
         df.insert(0, "S.No", range(1, len(df) + 1))
 
         st.success(f"Found {len(df)} results!")
         st.dataframe(df[['S.No','name','altitude','location','capacity_total','available_beds','available_date']])
 
-        # Excel download
         output = BytesIO()
         with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
             df.to_excel(writer, index=False, sheet_name='Availability')
@@ -153,16 +157,13 @@ def run_scraper(selected_names, selected_dates):
 # -------------------------
 # Streamlit UI
 # -------------------------
-# Logo + Title
 col_logo, col_title, _ = st.columns([1,5,1])
 with col_logo:
     st.image("BTA_LOGO_square.webp", width=80)
 with col_title:
     st.title("Mont Blanc Refuge Availability")
 
-# Side-by-side multiselects for three regions with logos
 col1, col2, col3 = st.columns(3)
-
 with col1:
     st.image("logo_french.png", width=80)
     selected_french = st.multiselect("French Refuges", options=sorted(region_french))
@@ -175,7 +176,6 @@ with col3:
 
 selected_refuges = selected_french + selected_italian + selected_swiss
 
-# Date input
 start_date_str = st.text_input("Enter Main Start Date (dd/mm/yyyy):", "")
 selected_dates = []
 if start_date_str:
@@ -186,7 +186,6 @@ if start_date_str:
         default=date_options
     )
 
-# Run scraper
 if st.button("Run Scraper"):
     if not selected_refuges:
         st.warning("Please select at least one refuge.")
