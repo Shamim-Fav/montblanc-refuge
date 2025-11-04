@@ -5,6 +5,7 @@ import re
 from datetime import datetime, timedelta
 import pandas as pd
 from io import BytesIO
+import time
 
 # -------------------------
 # Configuration
@@ -97,6 +98,7 @@ def run_scraper(selected_names, selected_dates):
     progress_bar = st.progress(0)
     progress_text = st.empty()
     total = len(selected_dates)
+    start_time = time.time()
 
     for idx, date_input in enumerate(selected_dates, start=1):
         day, month, year = date_input.split("/")
@@ -129,10 +131,16 @@ def run_scraper(selected_names, selected_dates):
         except Exception as e:
             st.warning(f"Error scraping {date_input}: {e}")
 
-        # Update progress
+        # --- Update progress + time info ---
         percent_complete = int((idx / total) * 100)
+        elapsed = time.time() - start_time
+        avg_per_item = elapsed / idx
+        remaining = avg_per_item * (total - idx)
         progress_bar.progress(percent_complete)
-        progress_text.text(f"Progress: {percent_complete}% ({idx}/{total} dates completed)")
+        progress_text.text(
+            f"Progress: {percent_complete}% ({idx}/{total} dates) | "
+            f"Elapsed: {elapsed:.1f}s | Est. remaining: {remaining:.1f}s"
+        )
 
     if all_results:
         df = pd.DataFrame(all_results)
